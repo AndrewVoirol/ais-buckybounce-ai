@@ -1,0 +1,56 @@
+{
+  "project": {
+    "name": "BuckyBounce AI",
+    "slug": "ais-buckybounce-ai",
+    "description": "A physics-driven buckyball (C₆₀ fullerene) you can click, shatter, and reassemble in the browser. Spring-based forces hold the geodesic structure together while gravity, a Hoberman-style breathing animation, and your mouse pull it apart. Type a theme like \"Cyberpunk\" or \"Gold Rush\" and Gemini rewrites the colors in real time.",
+    "category": "3d-visualization",
+    "tags": [
+      "three",
+      "@google/genai",
+      "@react-three/drei"
+    ],
+    "status": "shipped",
+    "aistudioUrl": ""
+  },
+  "tech": {
+    "framework": "vite",
+    "frameworkVersion": "^6.2.0",
+    "react": "^19.2.0",
+    "styling": "tailwind",
+    "stylingVersion": "^3.4.17",
+    "three": "^0.181.2",
+    "usesGeminiApi": true,
+    "geminiApiRole": "none",
+    "keyDependencies": [
+      "three",
+      "@google/genai",
+      "@react-three/drei",
+      "@react-three/cannon",
+      "@react-three/fiber",
+      "@vitejs/plugin-react",
+      "autoprefixer"
+    ],
+    "hasBackend": false
+  },
+  "quality": {
+    "hasReadme": true,
+    "readmeIsCustom": true,
+    "hasDemoGif": true,
+    "hasScreenshots": true,
+    "screenshotCount": 3,
+    "hasFavicon": true,
+    "hasCustomPackageName": true,
+    "hasScaffoldCruft": false,
+    "buildVerified": true,
+    "lastVerifiedDate": "2026-08-13"
+  },
+  "repo": {
+    "github": "https://github.com/AndrewVoirol/ais-buckybounce-ai.git",
+    "defaultBranch": "main"
+  },
+  "_meta": {
+    "generatedAt": "2026-08-07T02:03:57.489Z",
+    "generatedBy": "ais-fleet/generate-manifests",
+    "needsReview": []
+  }
+}

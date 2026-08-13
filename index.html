@@ -3,19 +3,22 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>BuckyBounce AI</title>
+    <title>BuckyBounce AI — Molecular Physics & Structural Lab</title>
+    <meta name="description" content="Interactive 3D molecular physics game and structural science laboratory featuring C60 Buckyballs, Carbon Nanotubes, Graphene, Geodesic Domes, and Tensegrity." />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <style>
-      body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #000; }
+      body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #050811; }
       #root { width: 100%; height: 100%; }
-      /* Custom scrollbar for overlay content */
-      ::-webkit-scrollbar { width: 6px; }
-      ::-webkit-scrollbar-track { background: transparent; }
+      /* Custom scrollbar */
+      ::-webkit-scrollbar { width: 6px; height: 6px; }
+      ::-webkit-scrollbar-track { background: rgba(0, 0, 0, 0.2); }
       ::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.2); border-radius: 3px; }
+      ::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.35); }
     </style>
-<link rel="stylesheet" href="/index.css">
-</head>
+    <link rel="stylesheet" href="/index.css" />
+  </head>
   <body>
     <div id="root"></div>
-  <script type="module" src="/index.tsx"></script>
-</body>
+    <script type="module" src="/index.tsx"></script>
+  </body>
 </html>

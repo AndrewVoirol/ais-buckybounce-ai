@@ -4,6 +4,7 @@ import * as THREE from 'three';
 
 export interface ParticleHandle {
   spawn: (pos: THREE.Vector3, color: string | string[], count: number, speedMult?: number) => void;
+  spawnRingBurst: (center: THREE.Vector3, normal: THREE.Vector3, radius: number, color: string) => void;
   spawnShatterExplosion: (
     center: THREE.Vector3,
     nodePositions: THREE.Vector3[],
@@ -12,7 +13,7 @@ export interface ParticleHandle {
   ) => void;
 }
 
-interface ShardParticle {
+interface ParticleItem {
   position: THREE.Vector3;
   velocity: THREE.Vector3;
   rotation: THREE.Euler;
@@ -32,12 +33,12 @@ export const Particles = forwardRef<ParticleHandle, {}>((_, ref) => {
   const glowMeshRef = useRef<THREE.InstancedMesh>(null);
 
   const dummy = useMemo(() => new THREE.Object3D(), []);
-  const particles = useRef<ShardParticle[]>([]);
-  const maxParticles = 2500;
+  const particles = useRef<ParticleItem[]>([]);
+  const maxParticles = 3000;
 
   const helperColor = useMemo(() => new THREE.Color(), []);
 
-  const getRandomColorFromPalette = (palette: string | string[]): THREE.Color => {
+  const getRandomColor = (palette: string | string[]): THREE.Color => {
     if (Array.isArray(palette)) {
       if (palette.length === 0) return new THREE.Color('#ffffff');
       const hex = palette[Math.floor(Math.random() * palette.length)];
@@ -53,15 +54,15 @@ export const Particles = forwardRef<ParticleHandle, {}>((_, ref) => {
       for (let i = 0; i < count; i++) {
         if (particles.current.length >= maxParticles) break;
 
-        const pColor = getRandomColorFromPalette(color);
-        const speed = (3 + Math.random() * 9) * speedMult;
+        const pColor = getRandomColor(color);
+        const speed = (3 + Math.random() * 8) * speedMult;
         const dir = new THREE.Vector3(
-          (Math.random() - 0.5),
-          (Math.random() - 0.5),
-          (Math.random() - 0.5)
+          Math.random() - 0.5,
+          Math.random() - 0.5,
+          Math.random() - 0.5
         ).normalize();
 
-        const isGlow = Math.random() > 0.4;
+        const isGlow = Math.random() > 0.35;
 
         particles.current.push({
           position: pos.clone(),
@@ -73,17 +74,50 @@ export const Particles = forwardRef<ParticleHandle, {}>((_, ref) => {
             (Math.random() - 0.5) * 15
           ),
           life: 1.0,
-          maxLife: 0.4 + Math.random() * 0.6,
-          scale: 0.12 + Math.random() * 0.25,
-          aspectScale: new THREE.Vector3(
-            0.6 + Math.random() * 0.8,
-            0.6 + Math.random() * 0.8,
-            0.6 + Math.random() * 0.8
-          ),
+          maxLife: 0.4 + Math.random() * 0.5,
+          scale: 0.12 + Math.random() * 0.2,
+          aspectScale: new THREE.Vector3(0.8 + Math.random() * 0.4, 0.8 + Math.random() * 0.4, 0.8 + Math.random() * 0.4),
           color: pColor,
           drag: 0.94 + Math.random() * 0.03,
-          gravity: -5 - Math.random() * 5,
+          gravity: -4 - Math.random() * 4,
           isGlow
+        });
+      }
+    },
+
+    spawnRingBurst: (center: THREE.Vector3, normal: THREE.Vector3, radius: number, color: string) => {
+      const ringParticleCount = 36;
+      // Generate orthogonal basis to normal
+      const vUp = Math.abs(normal.y) < 0.9 ? new THREE.Vector3(0, 1, 0) : new THREE.Vector3(1, 0, 0);
+      const tangentX = new THREE.Vector3().crossVectors(normal, vUp).normalize();
+      const tangentY = new THREE.Vector3().crossVectors(normal, tangentX).normalize();
+
+      for (let i = 0; i < ringParticleCount; i++) {
+        if (particles.current.length >= maxParticles) break;
+
+        const theta = (i / ringParticleCount) * Math.PI * 2;
+        const posOffset = new THREE.Vector3()
+          .addScaledVector(tangentX, Math.cos(theta) * radius)
+          .addScaledVector(tangentY, Math.sin(theta) * radius);
+
+        const spawnPos = center.clone().add(posOffset);
+        const outwardDir = posOffset.clone().normalize().addScaledVector(normal, (Math.random() - 0.5) * 0.5).normalize();
+
+        const pColor = new THREE.Color(color).offsetHSL(0, 0, (Math.random() - 0.5) * 0.2);
+
+        particles.current.push({
+          position: spawnPos,
+          velocity: outwardDir.multiplyScalar(4 + Math.random() * 6),
+          rotation: new THREE.Euler(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI),
+          rotationSpeed: new THREE.Vector3((Math.random() - 0.5) * 10, (Math.random() - 0.5) * 10, (Math.random() - 0.5) * 10),
+          life: 1.0,
+          maxLife: 0.5 + Math.random() * 0.3,
+          scale: 0.18 + Math.random() * 0.15,
+          aspectScale: new THREE.Vector3(1, 1, 1),
+          color: pColor,
+          drag: 0.92,
+          gravity: -1.5,
+          isGlow: true
         });
       }
     },
@@ -96,81 +130,60 @@ export const Particles = forwardRef<ParticleHandle, {}>((_, ref) => {
     ) => {
       const forceFactor = Math.max(0.8, blastForce / 15);
 
-      // 1. Structural Node Shards (burst outward from each node position matching theme colors)
+      // Shards per node
       nodePositions.forEach((nodePos) => {
         const outwardDir = new THREE.Vector3().subVectors(nodePos, center).normalize();
-        const shardsPerNode = 10;
+        const shardsPerNode = 8;
 
         for (let i = 0; i < shardsPerNode; i++) {
           if (particles.current.length >= maxParticles) break;
 
-          const pColor = getRandomColorFromPalette(palette);
-
+          const pColor = getRandomColor(palette);
           const randomSpread = new THREE.Vector3(
-            (Math.random() - 0.5) * 0.9,
-            (Math.random() - 0.5) * 0.9,
-            (Math.random() - 0.5) * 0.9
+            (Math.random() - 0.5) * 0.8,
+            (Math.random() - 0.5) * 0.8,
+            (Math.random() - 0.5) * 0.8
           );
           const velDir = outwardDir.clone().add(randomSpread).normalize();
-          const speed = (5 + Math.random() * 18) * forceFactor;
+          const speed = (5 + Math.random() * 16) * forceFactor;
 
           particles.current.push({
-            position: nodePos.clone().add(new THREE.Vector3(
-              (Math.random() - 0.5) * 0.3,
-              (Math.random() - 0.5) * 0.3,
-              (Math.random() - 0.5) * 0.3
-            )),
+            position: nodePos.clone().add(new THREE.Vector3((Math.random() - 0.5) * 0.3, (Math.random() - 0.5) * 0.3, (Math.random() - 0.5) * 0.3)),
             velocity: velDir.multiplyScalar(speed),
             rotation: new THREE.Euler(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI),
-            rotationSpeed: new THREE.Vector3(
-              (Math.random() - 0.5) * 20,
-              (Math.random() - 0.5) * 20,
-              (Math.random() - 0.5) * 20
-            ),
+            rotationSpeed: new THREE.Vector3((Math.random() - 0.5) * 18, (Math.random() - 0.5) * 18, (Math.random() - 0.5) * 18),
             life: 1.0,
-            maxLife: 0.5 + Math.random() * 0.8,
-            scale: 0.15 + Math.random() * 0.35,
-            aspectScale: new THREE.Vector3(
-              0.4 + Math.random() * 1.2,
-              0.4 + Math.random() * 1.2,
-              0.4 + Math.random() * 1.2
-            ),
+            maxLife: 0.5 + Math.random() * 0.6,
+            scale: 0.15 + Math.random() * 0.3,
+            aspectScale: new THREE.Vector3(0.5 + Math.random(), 0.5 + Math.random(), 0.5 + Math.random()),
             color: pColor,
-            drag: 0.95 + Math.random() * 0.02,
-            gravity: -3 - Math.random() * 6,
-            isGlow: Math.random() > 0.45
+            drag: 0.95,
+            gravity: -3 - Math.random() * 5,
+            isGlow: Math.random() > 0.4
           });
         }
       });
 
-      // 2. Central Energy Shockwave Ring
-      const ringParticleCount = 100;
-      for (let i = 0; i < ringParticleCount; i++) {
+      // Shockwave Ring
+      const shockwaveCount = 80;
+      for (let i = 0; i < shockwaveCount; i++) {
         if (particles.current.length >= maxParticles) break;
-
-        const angle = (i / ringParticleCount) * Math.PI * 2;
-        const elevation = (Math.random() - 0.5) * 0.6;
-        const dir = new THREE.Vector3(
-          Math.cos(angle),
-          elevation,
-          Math.sin(angle)
-        ).normalize();
-
-        const speed = (10 + Math.random() * 20) * forceFactor;
-        const pColor = getRandomColorFromPalette(palette);
+        const angle = (i / shockwaveCount) * Math.PI * 2;
+        const dir = new THREE.Vector3(Math.cos(angle), (Math.random() - 0.5) * 0.4, Math.sin(angle)).normalize();
+        const speed = (12 + Math.random() * 18) * forceFactor;
 
         particles.current.push({
           position: center.clone(),
           velocity: dir.multiplyScalar(speed),
           rotation: new THREE.Euler(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI),
-          rotationSpeed: new THREE.Vector3((Math.random() - 0.5) * 12, (Math.random() - 0.5) * 12, (Math.random() - 0.5) * 12),
+          rotationSpeed: new THREE.Vector3(5, 5, 5),
           life: 1.0,
-          maxLife: 0.4 + Math.random() * 0.5,
-          scale: 0.2 + Math.random() * 0.3,
+          maxLife: 0.4 + Math.random() * 0.4,
+          scale: 0.2 + Math.random() * 0.25,
           aspectScale: new THREE.Vector3(1, 1, 1),
-          color: pColor,
-          drag: 0.93,
-          gravity: -1,
+          color: getRandomColor(palette),
+          drag: 0.92,
+          gravity: -0.5,
           isGlow: true
         });
       }
@@ -244,7 +257,6 @@ export const Particles = forwardRef<ParticleHandle, {}>((_, ref) => {
 
   return (
     <>
-      {/* Faceted Crystalline Shards */}
       <instancedMesh ref={shardMeshRef} args={[undefined, undefined, maxParticles]}>
         <tetrahedronGeometry args={[0.25, 0]} />
         <meshStandardMaterial 
@@ -256,9 +268,8 @@ export const Particles = forwardRef<ParticleHandle, {}>((_, ref) => {
         />
       </instancedMesh>
 
-      {/* Glowing Energy Sparks */}
       <instancedMesh ref={glowMeshRef} args={[undefined, undefined, maxParticles]}>
-        <octahedronGeometry args={[0.2, 0]} />
+        <octahedronGeometry args={[0.18, 0]} />
         <meshBasicMaterial 
           toneMapped={false} 
           vertexColors 

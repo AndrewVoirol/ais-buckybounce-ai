@@ -1,5 +1,5 @@
 {
-  "name": "buckybounce-ai",
+  "name": "ais-buckybounce-ai",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -9,13 +9,13 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "three": "^0.181.2",
-    "react-dom": "^19.2.0",
-    "react": "^19.2.0",
     "@google/genai": "^1.30.0",
-    "@react-three/drei": "^10.7.7",
     "@react-three/cannon": "^6.6.0",
-    "@react-three/fiber": "^9.4.0"
+    "@react-three/drei": "^10.7.7",
+    "@react-three/fiber": "^9.4.0",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "three": "^0.181.2"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",
@@ -25,5 +25,8 @@
     "tailwindcss": "^3.4.17",
     "typescript": "~5.8.2",
     "vite": "^6.2.0"
+  },
+  "overrides": {
+    "nanoid": "^3.3.18"
   }
 }

@@ -1,109 +1,25 @@
-import { BuckyballData } from "./types";
-import * as THREE from 'three';
-
-// Generate a Truncated Icosahedron (C60 structure)
-export const generateBuckyballGeometry = (radius: number = 2): BuckyballData => {
-  // Golden ratio
-  const phi = (1 + Math.sqrt(5)) / 2;
-
-  // 1. Generate Icosahedron vertices (12 vertices)
-  const icosahedronVertices: THREE.Vector3[] = [];
-  
-  // (0, ±1, ±phi)
-  icosahedronVertices.push(new THREE.Vector3(0, 1, phi));
-  icosahedronVertices.push(new THREE.Vector3(0, 1, -phi));
-  icosahedronVertices.push(new THREE.Vector3(0, -1, phi));
-  icosahedronVertices.push(new THREE.Vector3(0, -1, -phi));
-  
-  // (±1, ±phi, 0)
-  icosahedronVertices.push(new THREE.Vector3(1, phi, 0));
-  icosahedronVertices.push(new THREE.Vector3(1, -phi, 0));
-  icosahedronVertices.push(new THREE.Vector3(-1, phi, 0));
-  icosahedronVertices.push(new THREE.Vector3(-1, -phi, 0));
-  
-  // (±phi, 0, ±1)
-  icosahedronVertices.push(new THREE.Vector3(phi, 0, 1));
-  icosahedronVertices.push(new THREE.Vector3(phi, 0, -1));
-  icosahedronVertices.push(new THREE.Vector3(-phi, 0, 1));
-  icosahedronVertices.push(new THREE.Vector3(-phi, 0, -1));
-
-  // Normalize to sphere surface
-  icosahedronVertices.forEach(v => v.normalize().multiplyScalar(radius));
-
-  // Neighbors logic for wiring
-  const neighbors: number[][] = Array(12).fill(0).map(() => []);
-  for (let i = 0; i < 12; i++) {
-    const dists = icosahedronVertices.map((v, idx) => ({ idx, d: v.distanceTo(icosahedronVertices[i]) }));
-    dists.sort((a, b) => a.d - b.d);
-    // The 5 closest non-zero distance vertices are neighbors
-    for (let k = 1; k <= 5; k++) {
-      neighbors[i].push(dists[k].idx);
-    }
-  }
-
-  // Unique edges
-  const edges: [number, number][] = [];
-  const edgeSet = new Set<string>();
-  
-  neighbors.forEach((nbrs, i) => {
-    nbrs.forEach(j => {
-      const key = i < j ? `${i}-${j}` : `${j}-${i}`;
-      if (!edgeSet.has(key)) {
-        edgeSet.add(key);
-        edges.push([i, j]);
-      }
-    });
-  });
-
-  // 3. Create C60 vertices
-  const c60Vertices: THREE.Vector3[] = [];
-  edges.forEach((edge) => {
-    const [i, j] = edge;
-    const v1 = icosahedronVertices[i];
-    const v2 = icosahedronVertices[j];
-
-    // Point A: 1/3 from v1 to v2
-    const p1 = new THREE.Vector3().lerpVectors(v1, v2, 1/3).normalize().multiplyScalar(radius);
-    // Point B: 2/3 from v1 to v2
-    const p2 = new THREE.Vector3().lerpVectors(v1, v2, 2/3).normalize().multiplyScalar(radius);
-
-    c60Vertices.push(p1);
-    c60Vertices.push(p2);
-  });
-  
-  const nodes: [number, number, number][] = c60Vertices.map(v => [v.x, v.y, v.z]);
-  const links: [number, number][] = [];
-  
-  // Naive distance based connection
-  for (let i = 0; i < nodes.length; i++) {
-    const v1 = new THREE.Vector3(...nodes[i]);
-    const candidates = [];
-    for (let j = 0; j < nodes.length; j++) {
-      if (i === j) continue;
-      const v2 = new THREE.Vector3(...nodes[j]);
-      candidates.push({ id: j, dist: v1.distanceTo(v2) });
-    }
-    candidates.sort((a, b) => a.dist - b.dist);
-    // Take top 3
-    for (let k = 0; k < 3; k++) {
-      const neighbor = candidates[k].id;
-      if (i < neighbor) {
-        links.push([i, neighbor]);
-      }
-    }
-  }
-
-  return { nodes, links };
-};
-
 // Shared AudioContext (lazy initialization)
 let sharedAudioCtx: AudioContext | null = null;
+let isAudioMuted = false;
 let lastPopTime = 0;
-const POP_COOLDOWN_MS = 50;
-const MAX_CONCURRENT_SOUNDS = 5;
+const POP_COOLDOWN_MS = 35;
+const MAX_CONCURRENT_SOUNDS = 8;
 let activeSoundCount = 0;
 
+export const toggleAudioMute = (): boolean => {
+  isAudioMuted = !isAudioMuted;
+  if (isAudioMuted && sharedAudioCtx && sharedAudioCtx.state === 'running') {
+    sharedAudioCtx.suspend();
+  } else if (!isAudioMuted && sharedAudioCtx && sharedAudioCtx.state === 'suspended') {
+    sharedAudioCtx.resume();
+  }
+  return isAudioMuted;
+};
+
+export const getIsAudioMuted = (): boolean => isAudioMuted;
+
 const getAudioContext = (): AudioContext | null => {
+  if (isAudioMuted) return null;
   try {
     if (!sharedAudioCtx || sharedAudioCtx.state === 'closed') {
       const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
@@ -119,8 +35,11 @@ const getAudioContext = (): AudioContext | null => {
   }
 };
 
-// Audio Synth for "Clack" / "Pop"
-export const playPopSound = (intensity: number = 1) => {
+/**
+ * 1. Metallic atom collision impact
+ */
+export const playPopSound = (intensity: number = 1, basePitch: number = 900) => {
+  if (isAudioMuted) return;
   const now = performance.now();
   if (now - lastPopTime < POP_COOLDOWN_MS) return;
   if (activeSoundCount >= MAX_CONCURRENT_SOUNDS) return;
@@ -134,68 +53,237 @@ export const playPopSound = (intensity: number = 1) => {
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
     
-    // FM Synthesis for metallic timbre
+    // FM Synthesis for metallic/crystal bell timbre
     const modulator = ctx.createOscillator();
     const modGain = ctx.createGain();
 
-    const baseFreq = 800 + Math.random() * 400; // Higher pitch for "bearing" sound
+    const freq = basePitch + Math.random() * 300;
 
     osc.type = 'sine';
-    osc.frequency.setValueAtTime(baseFreq, ctx.currentTime);
-    osc.frequency.exponentialRampToValueAtTime(baseFreq * 0.5, ctx.currentTime + 0.1);
+    osc.frequency.setValueAtTime(freq, ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(freq * 0.45, ctx.currentTime + 0.08);
     
     modulator.type = 'square';
-    modulator.frequency.setValueAtTime(baseFreq * 2.5, ctx.currentTime);
+    modulator.frequency.setValueAtTime(freq * 2.76, ctx.currentTime);
     modulator.connect(modGain);
     
-    modGain.gain.setValueAtTime(500 * intensity, ctx.currentTime);
-    modGain.gain.exponentialRampToValueAtTime(0.1, ctx.currentTime + 0.05);
+    modGain.gain.setValueAtTime(400 * Math.min(intensity, 2), ctx.currentTime);
+    modGain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.04);
     modGain.connect(osc.frequency);
 
-    gain.gain.setValueAtTime(0.4 * Math.min(intensity, 1), ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.08); // Very short decay
+    gain.gain.setValueAtTime(0.25 * Math.min(intensity, 1.5), ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.07);
     
     osc.connect(gain);
     gain.connect(ctx.destination);
     
     osc.start();
     modulator.start();
-    osc.stop(ctx.currentTime + 0.1);
-    modulator.stop(ctx.currentTime + 0.1);
+    osc.stop(ctx.currentTime + 0.08);
+    modulator.stop(ctx.currentTime + 0.08);
     
     osc.onended = () => { activeSoundCount--; };
-  } catch (e) {
+  } catch {
     activeSoundCount--;
   }
 };
 
-// Audio Synth for "Shatter" / Glassy explosion
+/**
+ * 2. Musical Ring Score Chime (Ascending Pentatonic Scales)
+ */
+const PENTATONIC_SCALE = [523.25, 587.33, 659.25, 783.99, 880.00, 1046.50, 1174.66, 1318.51];
+
+export const playRingScoreSound = (combo: number = 1, isPentagon: boolean = false) => {
+  if (isAudioMuted) return;
+  const ctx = getAudioContext();
+  if (!ctx) return;
+
+  try {
+    const rootIdx = (combo - 1) % PENTATONIC_SCALE.length;
+    const baseFreq = PENTATONIC_SCALE[rootIdx] * (isPentagon ? 1.25 : 1.0);
+    const now = ctx.currentTime;
+
+    // Dual chime chord
+    [baseFreq, baseFreq * 1.5].forEach((freq, i) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+
+      osc.type = isPentagon ? 'triangle' : 'sine';
+      osc.frequency.setValueAtTime(freq, now + i * 0.03);
+      osc.frequency.exponentialRampToValueAtTime(freq * 1.02, now + i * 0.03 + 0.25);
+
+      gain.gain.setValueAtTime(0.25, now + i * 0.03);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + i * 0.03 + 0.35);
+
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+
+      osc.start(now + i * 0.03);
+      osc.stop(now + i * 0.03 + 0.36);
+    });
+  } catch {
+    // Ignore audio error
+  }
+};
+
+/**
+ * 3. Slingshot Pull & Release Swoosh
+ */
+export const playSlingshotRelease = (power: number = 1) => {
+  if (isAudioMuted) return;
+  const ctx = getAudioContext();
+  if (!ctx) return;
+
+  try {
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    const now = ctx.currentTime;
+
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(150 + power * 100, now);
+    osc.frequency.exponentialRampToValueAtTime(800 + power * 400, now + 0.12);
+
+    gain.gain.setValueAtTime(0.3, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.14);
+
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+
+    osc.start(now);
+    osc.stop(now + 0.15);
+  } catch {
+    // Ignore audio error
+  }
+};
+
+/**
+ * 4. Structural Stress Creak / Strain Groan
+ */
+let lastGroanTime = 0;
+export const playStressGroan = (stressRatio: number) => {
+  if (isAudioMuted || stressRatio < 1.3) return;
+  const now = performance.now();
+  if (now - lastGroanTime < 180) return;
+  lastGroanTime = now;
+
+  const ctx = getAudioContext();
+  if (!ctx) return;
+
+  try {
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    const t = ctx.currentTime;
+
+    osc.type = 'sawtooth';
+    const baseFreq = 80 + stressRatio * 60;
+    osc.frequency.setValueAtTime(baseFreq, t);
+    osc.frequency.linearRampToValueAtTime(baseFreq + 30, t + 0.1);
+
+    gain.gain.setValueAtTime(0.12 * Math.min(stressRatio - 1, 1), t);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.12);
+
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+
+    osc.start(t);
+    osc.stop(t + 0.13);
+  } catch {
+    // Ignore audio error
+  }
+};
+
+/**
+ * 5. Shatter Explosion Sound
+ */
 export const playShatterSound = () => {
+  if (isAudioMuted) return;
   const ctx = getAudioContext();
   if (!ctx) return;
 
   try {
     const now = ctx.currentTime;
-    for (let i = 0; i < 8; i++) {
-      const delay = i * 0.015 + Math.random() * 0.02;
+    // Layered crystal glass shatter burst
+    for (let i = 0; i < 10; i++) {
+      const delay = i * 0.012 + Math.random() * 0.02;
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
       
-      const pitch = 1200 + Math.random() * 1600 - i * 100;
-      osc.type = i % 2 === 0 ? 'triangle' : 'sine';
+      const pitch = 1400 + Math.random() * 2000 - i * 80;
+      osc.type = i % 2 === 0 ? 'triangle' : 'sawtooth';
       osc.frequency.setValueAtTime(pitch, now + delay);
-      osc.frequency.exponentialRampToValueAtTime(pitch * 0.2, now + delay + 0.15);
+      osc.frequency.exponentialRampToValueAtTime(pitch * 0.15, now + delay + 0.2);
       
-      gain.gain.setValueAtTime(0.3 / (i + 1), now + delay);
-      gain.gain.exponentialRampToValueAtTime(0.001, now + delay + 0.15);
+      gain.gain.setValueAtTime(0.25 / (i * 0.5 + 1), now + delay);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + delay + 0.22);
       
       osc.connect(gain);
       gain.connect(ctx.destination);
       
       osc.start(now + delay);
-      osc.stop(now + delay + 0.16);
+      osc.stop(now + delay + 0.23);
     }
-  } catch (e) {
+  } catch {
     // Ignore audio errors
+  }
+};
+
+/**
+ * 6. Reassemble Magnet Vortex Sound
+ */
+export const playReassembleSound = () => {
+  if (isAudioMuted) return;
+  const ctx = getAudioContext();
+  if (!ctx) return;
+
+  try {
+    const now = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(180, now);
+    osc.frequency.exponentialRampToValueAtTime(980, now + 0.4);
+
+    gain.gain.setValueAtTime(0.05, now);
+    gain.gain.linearRampToValueAtTime(0.3, now + 0.35);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.45);
+
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+
+    osc.start(now);
+    osc.stop(now + 0.46);
+  } catch {
+    // Ignore audio error
+  }
+};
+
+/**
+ * 7. Laser Repair Beam Chirp
+ */
+export const playLaserRepairSound = () => {
+  if (isAudioMuted) return;
+  const ctx = getAudioContext();
+  if (!ctx) return;
+
+  try {
+    const now = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(1800, now);
+    osc.frequency.exponentialRampToValueAtTime(600, now + 0.12);
+
+    gain.gain.setValueAtTime(0.2, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.13);
+
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+
+    osc.start(now);
+    osc.stop(now + 0.14);
+  } catch {
+    // Ignore audio error
   }
 };

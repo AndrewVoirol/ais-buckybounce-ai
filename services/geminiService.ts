@@ -7,27 +7,37 @@ const ai = new GoogleGenAI({ apiKey });
 
 export const generateTheme = async (prompt: string): Promise<Theme> => {
   if (!apiKey) {
-    console.warn("No API Key provided, returning default theme.");
-    return DEFAULT_THEME;
+    console.warn("No API Key provided, returning customized fallback theme based on prompt.");
+    return {
+      ...DEFAULT_THEME,
+      name: prompt.charAt(0).toUpperCase() + prompt.slice(1),
+      lore: `Custom simulated environment derived from '${prompt}'.`
+    };
   }
 
   try {
     const response = await ai.models.generateContent({
       model: "gemini-2.5-flash",
-      contents: `Generate a visual and physical theme for a 3D buckyball physics toy based on this concept: "${prompt}". 
-      Return valid JSON matching the schema. 
-      For physics: 
-      - gravity: usually between -10 and 10 for y. 
-      - bounciness: 0 to 1. 
-      - linkStiffness: 100 to 2000 (higher is more rigid).
-      - blastForce: 5 to 50.
-      For colors: Hex codes.`,
+      contents: `Generate a visual and physical scientific material configuration for a 3D fullerene & molecular physics simulation based on this concept: "${prompt}".
+      Return valid JSON matching the schema.
+      Physics guidelines:
+      - gravity: 3-number array [gx, gy, gz], where gy is typically between -12 and +2.
+      - bounciness: restitution between 0.2 (soft/damped) and 0.95 (super-elastic).
+      - linkStiffness: Hooke's spring constant between 500 (flexible jelly) and 2500 (rigid crystal).
+      - blastForce: shatter explosion velocity between 10 and 45.
+      - damping: viscous damping between 0.1 and 0.8.
+      - yieldStrength: breaking strain threshold between 1.5 and 4.0.
+      - temperature: Kelvin temperature between 0 and 1000 K.
+      - resonanceFreq: natural vibration frequency in Hz between 1.0 and 15.0 Hz.
+      - lore: A short 1-2 sentence science-fiction or physical explanation of this material.
+      Colors must be valid Hex codes (#rrggbb).`,
       config: {
         responseMimeType: "application/json",
         responseSchema: {
           type: Type.OBJECT,
           properties: {
             name: { type: Type.STRING },
+            lore: { type: Type.STRING },
             colors: {
               type: Type.OBJECT,
               properties: {
@@ -35,8 +45,11 @@ export const generateTheme = async (prompt: string): Promise<Theme> => {
                 link: { type: Type.STRING },
                 background: { type: Type.STRING },
                 glow: { type: Type.STRING },
+                pentagon: { type: Type.STRING },
+                hexagon: { type: Type.STRING },
+                particle: { type: Type.STRING },
               },
-              required: ["node", "link", "background", "glow"],
+              required: ["node", "link", "background", "glow", "pentagon", "hexagon", "particle"],
             },
             physics: {
               type: Type.OBJECT,
@@ -48,8 +61,12 @@ export const generateTheme = async (prompt: string): Promise<Theme> => {
                 bounciness: { type: Type.NUMBER },
                 linkStiffness: { type: Type.NUMBER },
                 blastForce: { type: Type.NUMBER },
+                damping: { type: Type.NUMBER },
+                yieldStrength: { type: Type.NUMBER },
+                temperature: { type: Type.NUMBER },
+                resonanceFreq: { type: Type.NUMBER },
               },
-              required: ["gravity", "bounciness", "linkStiffness", "blastForce"],
+              required: ["gravity", "bounciness", "linkStiffness", "blastForce", "damping", "yieldStrength", "temperature", "resonanceFreq"],
             },
           },
           required: ["name", "colors", "physics"],
@@ -59,15 +76,18 @@ export const generateTheme = async (prompt: string): Promise<Theme> => {
 
     if (response.text) {
       const data = JSON.parse(response.text);
-      // Validate gravity array length
-      if (data.physics.gravity.length !== 3) {
-        data.physics.gravity = [0, -5, 0];
+      if (!Array.isArray(data.physics.gravity) || data.physics.gravity.length !== 3) {
+        data.physics.gravity = [0, -3, 0];
       }
       return data as Theme;
     }
-    throw new Error("No text in response");
+    throw new Error("No text returned by AI");
   } catch (error) {
     console.error("Theme generation failed:", error);
-    return DEFAULT_THEME;
+    return {
+      ...DEFAULT_THEME,
+      name: prompt,
+      lore: `Simulated state configured for '${prompt}'.`
+    };
   }
 };
