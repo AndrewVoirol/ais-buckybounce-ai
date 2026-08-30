@@ -22,3 +22,7 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Studio & Agent scratch directories
+.studio/
+.agents/
